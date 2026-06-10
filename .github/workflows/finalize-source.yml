@@ -1,0 +1,28 @@
+name: Finalize paper source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Publish final source
+        shell: bash
+        run: |
+          base64 --decode .source/paper_source.b64 > /tmp/paper_source.tar.gz
+          tar -xzf /tmp/paper_source.tar.gz
+          rm -f paper/paper.md
+          rm -rf .source
+          rm -f .github/workflows/finalize-source.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize paper source"
+          git push
