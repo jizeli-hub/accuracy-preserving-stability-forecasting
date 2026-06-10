@@ -19,7 +19,7 @@
 \maketitle
 
 \begin{abstract}
-Large-scale retail demand forecasts are used in repeated planning cycles, where excessive day-to-day forecast movement can create replenishment and capacity churn even when average error is acceptable. We study accuracy-preserving stability regularization for demand forecasting by augmenting the training objective with a penalty on consecutive within-series forecast movement. The method is implemented in a temporal-structured forecasting pipeline that combines recent-demand embeddings with calendar, price, hierarchy, item, and store features before tree-based prediction. On selected M5 demand series at 1000, 3000, and 4000-series scales, the stability-regularized model improves Forecast Stability Score over XGBoost by 6.91\%, 6.66\%, and 7.68\%, respectively, while RMSE changes remain within 0.72\% across three random seeds. Compared with post-hoc exponential smoothing, the proposed training-time objective is less aggressive in reducing raw forecast movement but preserves accuracy better and performs favorably under normalized stability. These results support a cautious conclusion: forecast stability can be optimized as an explicit training criterion while retaining comparable point-forecast accuracy in large-scale retail demand forecasting.
+Large-scale retail demand forecasts are used in repeated planning cycles, where excessive forecast movement can create replenishment and capacity churn even when average error is acceptable. Prior work has already studied forecast-stability objectives for neural forecasting and model-agnostic post-processing. We therefore frame this paper as a focused empirical study of whether a tree-based retail forecasting pipeline can incorporate a training-time penalty on consecutive within-series forecast movement while preserving point-forecast accuracy. The method combines recent-demand embeddings with calendar, price, hierarchy, item, and store features before XGBoost prediction. On selected M5 demand series at 1000, 3000, and 4000-series scales, the stability-regularized model improves Forecast Stability Score over XGBoost by 6.91\%, 6.66\%, and 7.68\%, respectively, while RMSE changes remain within 0.72\% across three random seeds. Compared with post-hoc exponential smoothing, the training-time objective is less aggressive in reducing raw forecast movement but preserves accuracy better and performs favorably under normalized stability. These results support a cautious conclusion: stability can be represented as an explicit training criterion in a large-scale retail boosted-tree pipeline, but the contribution is an applied accuracy-stability trade-off study rather than a wholly new forecast-stability paradigm.
 \end{abstract}
 
 
@@ -28,9 +28,9 @@ Demand forecasts are no longer passive reports in many supply chains. They feed 
 
 Recent deep forecasting models have improved long-horizon sequence modeling through Transformer, MLP, and multiscale temporal architectures \cite{wang2024timemixer,nie2023patchtst,zhou2021informer,wu2021autoformer,chen2023tsmixer}. Retail demand forecasting, however, is not only a sequence modeling problem. Calendar effects, sell prices, events, product hierarchy, and store identity often carry information that is awkward to represent with temporal history alone. The M5 benchmark makes this tension explicit by combining item-store demand histories with calendar and price tables \cite{makridakis2022m5}. Tree-based learners such as XGBoost are widely used for sparse, heterogeneous tabular prediction problems because boosted trees can model nonlinear feature interactions efficiently \cite{chen2016xgboost}; in retail forecasting, such models are often paired with engineered lag and rolling features \cite{fildes2022retail,makridakis2022m5}.
 
-This paper centers on stability regularization rather than on model combination alone. We ask whether a forecasting model can be trained to reduce excessive consecutive within-series forecast movement while remaining close to the accuracy profile of a strong structured baseline. The hybrid temporal-structured forecasting pipeline is the implementation vehicle for this question: a lightweight TimeMixer-style encoder summarizes recent demand history, structured operational features provide calendar, price, hierarchy, item, and store context, and an XGBoost layer produces point forecasts. The purpose is not to maximize smoothness at all costs, but to study a controlled accuracy-stability trade-off.
+This paper centers on stability regularization rather than on model combination alone. We ask whether a forecasting model can be trained to reduce excessive consecutive within-series forecast movement while remaining close to the accuracy profile of a strong structured baseline. The hybrid temporal-structured forecasting pipeline is the implementation vehicle for this question: a lightweight TimeMixer-style encoder summarizes recent demand history, structured operational features provide calendar, price, hierarchy, item, and store context, and an XGBoost layer produces point forecasts. The purpose is not to maximize smoothness at all costs, but to study a controlled accuracy-stability trade-off in a setting where simpler post-processing is an important competing explanation.
 
-Our contributions are threefold. First, we formulate forecast stability regularization as a training-time objective that penalizes excessive consecutive within-series forecast movement, moving beyond post-hoc smoothing. Second, we design a hybrid temporal-structured forecasting pipeline that uses temporal embeddings to represent recent demand history and combines them with calendar, price, hierarchy, item, and store features. Third, we systematically evaluate the accuracy-stability trade-off through smoothing baselines, normalized stability, seed robustness, leakage auditing, runtime analysis, and large-scale M5 experiments on 1000, 3000, and 4000 demand series. We avoid claiming state-of-the-art accuracy; the contribution is an operationally motivated stability-accuracy study.
+Our contributions are threefold. First, we adapt an accuracy-plus-stability training objective to a boosted-tree retail forecasting pipeline and state explicitly how this differs from prior neural stability objectives and post-hoc stabilization methods. Second, we evaluate the objective in a hybrid temporal-structured M5 setup that uses temporal embeddings for recent demand history and structured calendar, price, hierarchy, item, and store features for tree-based prediction. Third, we systematically evaluate the accuracy-stability trade-off through smoothing baselines, normalized stability, seed robustness, leakage auditing, runtime analysis, and large-scale M5 experiments on 1000, 3000, and 4000 demand series. We avoid claiming state-of-the-art accuracy or a newly invented stability concept; the contribution is an operationally motivated stability-accuracy study for a practical boosted-tree retail pipeline.
 
 \section{Related Work}
 \subsection{Deep Time Series Forecasting}
@@ -51,7 +51,10 @@ The present study uses this hybrid direction as a practical vehicle for stabilit
 \subsection{Forecast Stability and Robust Forecasting}
 Supply chain planning is sensitive not only to forecast error but also to forecast instability \cite{lee1997bullwhip,chen2000bullwhip,godahewa2025forecastStability}. The operational cost of forecast volatility is related to the bullwhip effect, where distorted or amplified demand information propagates upstream and increases order variability \cite{lee1997bullwhip}. Forecasting and lead times contribute directly to bullwhip behavior \cite{chen2000bullwhip}, and forecasting method choice can affect demand amplification under replenishment policies \cite{zhang2004forecastingBullwhip}. Intermittent demand has long been treated as an inventory-relevant forecasting problem, from Croston-style stock-control methods \cite{croston1972intermittent} to later work on intermittent-demand accuracy and stock-control performance \cite{syntetos2005accuracy,syntetos2006stockControl}. Recent work formalizes forecast stability and the accuracy-stability trade-off \cite{godahewa2025forecastStability}. Robust forecasting emphasizes reliability under noise, outliers, and structural change \cite{barrow2020robustExponentialSmoothing}, while multi-step evaluation work shows that aggregate error metrics can hide forecast update behavior \cite{strom2024forecastMetrics}.
 
-The reviewed literature points to a narrower gap: forecast stability, retail covariates, and temporal representation learning have each been studied, but fewer studies evaluate training-time stability regularization against post-hoc smoothing within the same large-scale retail-demand experiment. We therefore position this work as a cautious empirical study of accuracy-preserving stability regularization, with a hybrid temporal-structured pipeline used to instantiate the forecasting model.
+The closest prior work is central to the positioning of this paper. Van Belle et al. introduced a deep-learning approach that combines forecast error and forecast-instability terms in the training objective \cite{vanBelle2023stability}, and subsequent work investigates dynamic loss weighting for the same accuracy-stability tension \cite{caljon2024dynamic}. Related probabilistic N-BEATS work also studies stability-motivated extensions to neural forecasting \cite{vanBelle2024probabilistic}. In parallel, model-agnostic interpolation methods can stabilize the forecasts of a fitted base model, including tree-based forecasters, by moving along an explicit post-processing trade-off curve \cite{godahewa2025forecastStability}. These studies mean that a composite stability loss is not, by itself, a new forecasting idea. The narrower gap addressed here is empirical and implementation-oriented: we evaluate a training-time consecutive-movement penalty inside a boosted-tree retail forecasting pipeline and compare it directly with smoothing baselines under the same M5 experimental setup.
+
+\subsection{Cross-Industry Motivation}
+Although the experiments in this paper are restricted to retail demand, the motivation for forecast stability is broader. In supply-chain replenishment, unstable item-level forecasts can propagate into order changes and upstream variability \cite{lee1997bullwhip,chen2000bullwhip,zhang2004forecastingBullwhip}. In spare-parts and maintenance settings, intermittent demand forecasts support inventory policies where unnecessary forecast churn may translate into excess stock or service risk \cite{croston1972intermittent,syntetos2006stockControl}. In energy systems, load forecasts are inputs to operational planning, commitment, and capacity decisions, where repeated forecast revision can affect scheduling and procurement choices \cite{deCarolis2016loadForecasting}. In healthcare operations, demand forecasts are used for bed, staffing, and resource planning, where sudden forecast revisions can be costly even if average error is acceptable \cite{inpatientBed2022forecasting}. These are motivating use cases, not additional empirical claims of this paper. They clarify why an accuracy-stability trade-off has academic and practical value beyond a single retail benchmark, while the evidence reported below remains limited to M5.
 
 \section{Methodology}
 \subsection{Problem Formulation}
@@ -93,7 +96,7 @@ where $\lambda$ controls the stability-accuracy trade-off. We evaluate $\lambda 
 \subsection{Implementation of the Stability-Aware XGBoost Objective}
 The stability-aware objective is implemented through the XGBoost custom-objective interface, which requires row-level gradients and Hessians. The MSE component contributes the standard squared-error gradient $2(\hat{y}_{i,t}-y_{i,t})$ and a positive Hessian of 2 for each training row. The stability context is built after sorting the training frame by item-store series and day index. Adjacent prediction differences are then computed only for consecutive rows belonging to the same series and consecutive days.
 
-For each valid adjacent pair, the absolute-change penalty contributes a sign subgradient to the later observation and the opposite subgradient to the preceding observation. Interior observations can therefore receive contributions from both neighboring same-series prediction differences, while boundary observations receive only one adjacent contribution. In the implementation, the sign term is numerically stabilized by dividing each difference by $\max(|\Delta|,\epsilon)$, and the Hessian is kept positive by adding a small $\lambda\epsilon$ term. The stability term is formed from training-window predictions only; validation and test targets are not used when constructing the objective. The regularizer therefore acts as training-time within-series movement control, not as post-hoc smoothing or global smoothing across unrelated products or stores. The automated leakage audit in Appendix~\ref{tab:leakage_audit_summary} confirms the time-based train-validation separation, shifted lag and rolling features, train-fitted encoders, and same-series training-only stability pairs.
+For each valid adjacent pair, the absolute-change penalty contributes a sign subgradient to the later observation and the opposite subgradient to the preceding observation. Interior observations can therefore receive contributions from both neighboring same-series prediction differences, while boundary observations receive only one adjacent contribution. In the implementation, the sign term is numerically stabilized by dividing each difference by $\max(|\Delta|,\epsilon)$, and the Hessian is kept positive by adding a small $\lambda\epsilon$ term. The stability term is formed from training-window predictions only; validation and test targets are not used when constructing the objective. The regularizer therefore acts as training-time within-series movement control, not as post-hoc smoothing or global smoothing across unrelated products or stores. The leakage-audit appendix table confirms the time-based train-validation separation, shifted lag and rolling features, train-fitted encoders, and same-series training-only stability pairs.
 
 \subsection{Post-Processing Smoothing Baseline}
 To separate training-time stability regularization from post-hoc smoothing, we also evaluate exponential smoothing applied after prediction, following the broad use of exponential-smoothing ideas in forecasting and robust forecasting \cite{barrow2020robustExponentialSmoothing,petropoulos2022forecasting}:
@@ -119,6 +122,7 @@ Lower FSS indicates smoother consecutive forecasts. To reduce sensitivity to dem
 \mathrm{nFSS} = \frac{1}{M}\sum_{i=1}^M \mathrm{nFSS}_i,
 \end{equation}
 where $\epsilon=10^{-6}$. The nFSS metric prevents high-volume series from dominating the stability estimate, although intermittent zero-demand series can still lead to large absolute normalized values.
+Our FSS is a consecutive-prediction movement metric within a validation horizon. It is related to, but not identical with, rolling-origin forecast instability as used in prior forecast-stability literature, where forecasts for the same target period are compared as the forecast origin moves \cite{vanBelle2023stability,godahewa2025forecastStability}. This distinction matters for interpretation: the reported experiments test whether the fitted model reduces within-series forecast movement across adjacent validation dates, not whether it minimizes every form of forecast revision instability under repeated refitting.
 
 \section{Experiments}
 \subsection{Dataset and Setup}
@@ -133,7 +137,7 @@ We remove raw MAPE because M5 contains many zero and near-zero demand observatio
 We compare four primary methods: (i) XGBoost baseline using structured operational features, (ii) TimeMixer-only temporal forecasting, (iii) Hybrid TimeMixer + XGBoost, and (iv) Hybrid TimeMixer + XGBoost with the stability-aware objective. To address whether stability gains arise merely from smoothing, we additionally evaluate XGBoost + exponential smoothing and Hybrid TimeMixer + XGBoost + exponential smoothing with $\alpha \in \{0.5,0.7,0.9\}$.
 
 \subsection{Main Results}
-Table~\ref{tab:main_mean_std} reports mean and standard deviation across seeds, and Fig.~\ref{fig:main_results} summarizes RMSE and FSS across scales. XGBoost remains the strongest point-accuracy baseline at the revised main scales. The stability-aware hybrid model, in contrast, gives the lowest FSS among the primary training methods at each scale. The result is best read as an accuracy-stability trade-off, not as a replacement for the structured baseline on pure RMSE.
+The main-results table reports mean and standard deviation across seeds, and the accompanying figure summarizes RMSE and FSS across scales. XGBoost remains the strongest point-accuracy baseline at the revised main scales. The stability-aware hybrid model, in contrast, gives the lowest FSS among the primary training methods at each scale. The result is best read as an accuracy-stability trade-off, not as a replacement for the structured baseline on pure RMSE.
 
 
 \begin{table*}[!t]
@@ -166,14 +170,14 @@ Series & Method & Runs & MAE & RMSE & WAPE (\%) & FSS & Volatility \\
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.92\linewidth]{updated_scalability_figures/main_results_rmse_fss.pdf}
+\includegraphics[width=0.92\linewidth]{figures/main_results_rmse_fss.png}
 \caption{Main results under consistent full training configurations. Error bars denote standard deviation across three random seeds.}
 \label{fig:main_results}
 \end{figure*}
 \FloatBarrier
 
 \subsection{Stability-Accuracy Trade-off}
-The central empirical result remains stable after the consistency revision. As shown in Table~\ref{tab:stability_summary}, the stability-aware hybrid model improves FSS over XGBoost by 6.91\%, 6.66\%, and 7.68\% at 1000, 3000, and 4000 series, respectively. Across these scales, the largest absolute RMSE change is 0.72\%. Figure~\ref{fig:accuracy_stability_tradeoff} shows that stability regularization moves the operating point toward smoother forecasts while keeping RMSE close to the structured baseline.
+The central empirical result remains stable after the consistency revision. As shown in the stability-summary table, the stability-aware hybrid model improves FSS over XGBoost by 6.91\%, 6.66\%, and 7.68\% at 1000, 3000, and 4000 series, respectively. Across these scales, the largest absolute RMSE change is 0.72\%. The accuracy-stability trade-off figure shows that stability regularization moves the operating point toward smoother forecasts while keeping RMSE close to the structured baseline.
 
 
 \begin{table*}[!t]
@@ -197,7 +201,7 @@ Series & FSS Improvement (\%) & RMSE Change (\%) & Volatility Improvement (\%) &
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.92\textwidth]{updated_scalability_figures/accuracy_stability_tradeoff.pdf}
+\includegraphics[width=0.92\textwidth]{figures/accuracy_stability_tradeoff.png}
 \caption{Accuracy-stability trade-off under the revised consistent scalability setup. Points show method-level operating positions at each scale.}
 \label{fig:accuracy_stability_tradeoff}
 \end{figure*}
@@ -205,9 +209,9 @@ Series & FSS Improvement (\%) & RMSE Change (\%) & Volatility Improvement (\%) &
 
 
 \subsection{Smoothing Baselines and Normalized Stability}
-Table~\ref{tab:smoothing_comparison} compares training-time stability regularization with the strongest post-processing smoothing setting from the tested grid. The result is deliberately mixed. With $\alpha=0.5$, exponential smoothing obtains the lowest raw FSS, as expected: it directly damps consecutive prediction changes. The cost is visible in RMSE. Hybrid + smoothing increases RMSE by roughly 1.66--2.33\% relative to XGBoost, while the stability-aware objective remains within the main-paper bound of 0.72\%.
+The smoothing-comparison table compares training-time stability regularization with the strongest post-processing smoothing setting from the tested grid. The result is deliberately mixed. With $\alpha=0.5$, exponential smoothing obtains the lowest raw FSS, as expected: it directly damps consecutive prediction changes. The cost is visible in RMSE. Hybrid + smoothing increases RMSE by roughly 1.66--2.33\% relative to XGBoost, while the stability-aware objective remains within the main-paper bound of 0.72\%.
 
-Figure~\ref{fig:smoothing_tradeoff_main} shows the same pattern as a trade-off curve. Smoothing moves forecasts down and to the right: lower raw movement, higher error. The stability-aware objective occupies a less aggressive region. It does not minimize raw FSS, but it preserves more of the accuracy-oriented forecast structure.
+The smoothing trade-off figure shows the same pattern as a trade-off curve. Smoothing moves forecasts down and to the right: lower raw movement, higher error. The stability-aware objective occupies a less aggressive region. It does not minimize raw FSS, but it preserves more of the accuracy-oriented forecast structure.
 
 \begin{table*}[!t]
 \centering
@@ -235,23 +239,23 @@ Series & Method & $\alpha$ & RMSE & WAPE (\%) & FSS & nFSS & RMSE $\Delta$ (\%) 
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/smoothing_accuracy_stability_tradeoff.pdf}
+\includegraphics[width=0.92\linewidth]{figures/smoothing_accuracy_stability_tradeoff.png}
 \caption{Smoothing moves forecasts toward lower raw FSS at the cost of higher RMSE, while the stability-aware objective occupies a more accuracy-preserving trade-off region.}
 \label{fig:smoothing_tradeoff_main}
 \end{figure*}
 
-The normalized stability analysis adds a scale-aware check. The stability-aware objective improves nFSS relative to XGBoost by 40.21\%, 45.66\%, and 41.93\% at 1000, 3000, and 4000 series in the smoothing comparison runs, and it gives lower nFSS than the best Hybrid + smoothing baseline at all three scales. Figure~\ref{fig:normalized_fss_main} reports the same comparison with standard deviations across seeds. Since nFSS divides by average realized demand, its absolute magnitude is not an operational threshold for intermittent low-volume series; the useful information is the relative ordering across methods.
+The normalized stability analysis adds a scale-aware check. The stability-aware objective improves nFSS relative to XGBoost by 40.21\%, 45.66\%, and 41.93\% at 1000, 3000, and 4000 series in the smoothing comparison runs, and it gives lower nFSS than the best Hybrid + smoothing baseline at all three scales. The normalized-FSS figure reports the same comparison with standard deviations across seeds. Since nFSS divides by average realized demand, its absolute magnitude is not an operational threshold for intermittent low-volume series; the useful information is the relative ordering across methods.
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/normalized_fss_comparison.pdf}
+\includegraphics[width=0.92\linewidth]{figures/normalized_fss_comparison.png}
 \caption{Scale-normalized forecast stability with standard deviations across seeds. nFSS values are large in absolute magnitude because intermittent low-volume series can have small denominators; nFSS is interpreted as a relative comparison metric rather than an absolute operational threshold.}
 \label{fig:normalized_fss_main}
 \end{figure*}
 \FloatBarrier
 
 \subsection{Scalability and Runtime Analysis}
-The scalability experiments use consistent training configurations across the main reported scales to improve runtime comparability. Table~\ref{tab:runtime_scalability} shows the expected runtime increase from adding temporal representation learning and stability-aware optimization. Relative to XGBoost, the final stability-aware hybrid method incurs runtime multipliers of 1000 series: 4.39$\times$, 3000 series: 7.71$\times$, 4000 series: 9.72$\times$. This overhead is material, but it is measured under a consistent full-row, 300-tree configuration at each main scale. The smoothing baselines add negligible post-processing time when applied to stored predictions, but they do not reduce the cost of fitting the underlying XGBoost or hybrid models.
+The scalability experiments use consistent training configurations across the main reported scales to improve runtime comparability. The runtime-scalability table shows the expected runtime increase from adding temporal representation learning and stability-aware optimization. Relative to XGBoost, the final stability-aware hybrid method incurs runtime multipliers of 1000 series: 4.39$\times$, 3000 series: 7.71$\times$, 4000 series: 9.72$\times$. This overhead is material, but it is measured under a consistent full-row, 300-tree configuration at each main scale. The smoothing baselines add negligible post-processing time when applied to stored predictions, but they do not reduce the cost of fitting the underlying XGBoost or hybrid models.
 
 
 \begin{table*}[!t]
@@ -283,13 +287,15 @@ Series & Method & Runtime Mean (s) & Runtime Std (s) & Peak Memory (MB) \\
 
 
 \subsection{Robustness Analysis}
-Seed-level variability is small relative to the main stability pattern. The stability-aware hybrid model improves FSS over XGBoost for all three seeds at all revised main scales. Averaged across 1000, 3000, and 4000 series, the FSS improvement is 7.08\%, while the largest absolute RMSE change remains 0.72\%. The normalized FSS results in Fig.~\ref{fig:normalized_fss_main} provide an additional robustness check against demand-scale effects.
+Seed-level variability is small relative to the main stability pattern. The stability-aware hybrid model improves FSS over XGBoost for all three seeds at all revised main scales. Averaged across 1000, 3000, and 4000 series, the FSS improvement is 7.08\%, while the largest absolute RMSE change remains 0.72\%. The normalized-FSS results provide an additional robustness check against demand-scale effects.
 
 \FloatBarrier
 \section{Discussion}
 The results do not imply that objective-based regularization dominates smoothing in every setting. Smoothing is a strong and practical baseline when the only goal is to minimize raw forecast movement. In our experiments it gives the lowest raw FSS, and it is inexpensive once predictions have been produced. That is useful evidence, not a nuisance result.
 
 The proposed method sits at a different operating point. It gives up some raw smoothness relative to post-hoc smoothing, but it preserves more of the accuracy-oriented forecast structure and performs better under scale-normalized stability. For supply chain planning, that distinction matters because forecast updates can affect replenishment and upstream variability \cite{lee1997bullwhip,chen2000bullwhip,zhang2004forecastingBullwhip}. A replenishment planner may prefer a forecast that is moderately smoother and still responsive to demand changes over one that suppresses movement more aggressively but drifts farther from the point-accuracy baseline.
+
+The cross-industry implication is therefore methodological rather than dataset-specific. Retail replenishment, spare-parts stocking, energy scheduling, and healthcare capacity planning all use forecasts as repeated operational inputs, but the acceptable stability-accuracy trade-off will differ by domain. A planner managing perishable retail inventory may accept more forecast movement to avoid under-reacting to demand spikes, while a spare-parts planner with long lead times may prefer a more stable signal. The present M5 results provide a reproducible retail benchmark for studying that trade-off; they do not prove the same operating point is optimal in other industries.
 
 The stability term is also better aligned with the training process than a purely post-processing correction. Intermittent retail demand contains zeros, sparse spikes, and short-lived local shocks. A standard accuracy objective can react to those patterns sharply, especially when lag features encode recent demand. Penalizing within-series prediction changes gives the model a reason to avoid some of that local oscillation while still learning from calendar, price, and temporal context. This is not a substitute for decision-aware inventory optimization, but it is a tractable way to put operational stability into the forecasting objective.
 
@@ -301,9 +307,11 @@ In many supply-chain settings, demand forecasts are generated in scheduled batch
 \section{Limitations}
 The evaluation is confined to the M5 retail demand dataset. M5 is a useful benchmark for sparse item-store demand, but it does not represent every supply chain environment. Industrial spare parts, perishables, and multi-echelon manufacturing systems may have different stability requirements and different costs for delayed response.
 
+The paper also uses consecutive within-series forecast movement as its main stability target. This is operationally interpretable for item-store demand sequences, but it is not a full rolling-origin revision study. A stronger version of the work would rerun the pipeline across multiple forecast origins and report fixed-target revision instability alongside FSS and nFSS.
+
 The main scalability study uses selected subsets rather than the full M5 hierarchy. The largest full-configuration main experiment contains 4000 series so that all reported main scales share the same training configuration. The earlier capped 5000-series diagnostic is kept in the appendix only and is not used for the main runtime claims.
 
-The normalized FSS analysis reduces sensitivity to demand scale, but it has its own caveat: low-volume intermittent series can produce large absolute nFSS values because the denominator is small. We therefore treat nFSS as a relative robustness metric. Finally, this paper evaluates forecast metrics rather than downstream inventory outcomes. A stronger operational study would connect stability-aware forecasts to service level, stockouts, holding cost, and schedule changes.
+The normalized FSS analysis reduces sensitivity to demand scale, but it has its own caveat: low-volume intermittent series can produce large absolute nFSS values because the denominator is small. We therefore treat nFSS as a relative robustness metric. Finally, this paper evaluates forecast metrics rather than downstream inventory outcomes. A stronger operational study would connect stability-aware forecasts to service level, stockouts, holding cost, schedule changes, energy-dispatch costs, or staffing revisions, depending on the deployment context.
 
 
 \FloatBarrier
@@ -316,7 +324,7 @@ We presented an accuracy-preserving stability regularization study for large-sca
 This appendix contains secondary diagnostics, the full smoothing alpha ablation, normalized stability tables, leakage audit details, and the 5000-series capped experiment that was removed from the main scalability analysis. The main paper reports only 1000, 3000, and 4000-series results because those experiments use consistent full selected training rows and 300 XGBoost trees.
 
 \subsection{Full Smoothing Alpha Ablation}
-Table~\ref{tab:smoothing_alpha_ablation} reports the complete exponential smoothing sweep. Lower $\alpha$ values place more weight on the previous smoothed forecast and therefore reduce raw FSS more aggressively, but they typically increase RMSE.
+The smoothing-alpha table reports the complete exponential smoothing sweep. Lower $\alpha$ values place more weight on the previous smoothed forecast and therefore reduce raw FSS more aggressively, but they typically increase RMSE.
 
 \begin{table*}[!t]
 \centering
@@ -352,7 +360,7 @@ Series & Base & $\alpha$ & RMSE & WAPE (\%) & FSS & nFSS & Volatility \\
 \end{table*}
 
 \subsection{Normalized Forecast Stability}
-Table~\ref{tab:normalized_fss_appendix} reports raw and normalized stability metrics for the primary methods and best smoothing baselines. The stability-aware objective gives the lowest nFSS at all three main scales, although smoothing gives the lowest raw FSS. The corresponding main-paper figure is Fig.~\ref{fig:normalized_fss_main}.
+The normalized-FSS appendix table reports raw and normalized stability metrics for the primary methods and best smoothing baselines. The stability-aware objective gives the lowest nFSS at all three main scales, although smoothing gives the lowest raw FSS. The corresponding main-paper figure reports the same comparison visually.
 
 \begin{table*}[!t]
 \centering
@@ -389,7 +397,7 @@ Series & Method & RMSE & FSS & nFSS & Volatility \\
 
 
 \subsection{Leakage Audit}
-The automated leakage audit returned a leakage-safe status. Table~\ref{tab:leakage_audit_summary} summarizes the main checks. The train-validation split uses training dates through 2016-03-27 and validation dates from 2016-03-28 through 2016-04-24. No validation rows or validation dates appear in training.
+The automated leakage audit returned a leakage-safe status. The leakage-audit table summarizes the main checks. The train-validation split uses training dates through 2016-03-27 and validation dates from 2016-03-28 through 2016-04-24. No validation rows or validation dates appear in training.
 
 \begin{table*}[!t]
 \centering
@@ -416,7 +424,7 @@ Stability objective & PASS & same-series consecutive training predictions only \
 We attempted to run the 5000-series experiment using the same full configuration as the revised main scales: full selected training rows, 300 XGBoost trees, identical feature engineering, and the same stability-aware objective. The run completed loading, feature construction, and baseline XGBoost fitting for seed 42, but terminated during the hybrid temporal/stability stage before producing result tables. No reduced full-5000 setting was forced.
 
 \subsection{Capped 5000-Series Diagnostic}
-Table~\ref{tab:capped_5000_appendix} reports the earlier capped 5000-series diagnostic for transparency. This experiment used 250,000 sampled training rows and 120 XGBoost trees. It is not used in the main runtime or scalability claims.
+The capped-5000 appendix table reports the earlier capped 5000-series diagnostic for transparency. This experiment used 250,000 sampled training rows and 120 XGBoost trees. It is not used in the main runtime or scalability claims.
 
 \begin{table*}[!t]
 \centering
@@ -438,19 +446,12 @@ Series & Method & Configuration & MAE & RMSE & WAPE (\%) & FSS & Volatility \\
 \end{table*}
 
 \subsection{Additional Diagnostics}
-Seed-level robustness is retained as a supplementary check. It is not used for the main claims, but it provides additional evidence on run-to-run variation.
-
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.78\linewidth]{updated_scalability_figures/seed_robustness.pdf}
-\caption{Seed-level robustness diagnostic for the revised main scales.}
-\label{fig:seed_robustness_appendix}
-\end{figure*}
+Seed-level robustness is retained as a supplementary check in the reported mean and standard-deviation tables. It is not used for the main novelty claim, but it provides additional evidence on run-to-run variation across the three reported seeds.
 
 \FloatBarrier
 \clearpage
 
 \bibliographystyle{IEEEtran}
-\bibliography{revised_references}
+\bibliography{references}
 
 \end{document}
