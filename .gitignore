@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.cache/
+.matplotlib_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Raw M5 data is downloaded locally.
+data/m5-forecasting-accuracy/
+data/*.zip
+data/*.gz
+
+# Generated experiment artifacts.
+logs/
+paper_results/
+paper_figures/
+

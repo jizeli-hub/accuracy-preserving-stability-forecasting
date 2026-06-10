@@ -1,0 +1,70 @@
+Data Leakage Audit Report
+
+Audit status: LEAKAGE-SAFE
+Data directory: data/m5-forecasting-accuracy
+Max series audited: 5000
+Random seed: 42
+
+Train/validation split:
+ train_rows  validation_rows  train_series  validation_series train_min_date train_max_date validation_min_date validation_max_date  train_max_date_before_validation_min_date
+    9285000           140000          5000               5000     2011-02-26     2016-03-27          2016-03-28          2016-04-24                                       True
+
+Checks:
+                                                  check status                                                                                                             details
+              train_max_date_before_validation_min_date   PASS                                                           train_max_date=2016-03-27, validation_min_date=2016-03-28
+                         no_validation_rows_in_training   PASS                                                                                                      overlap_rows=0
+                        no_validation_dates_in_training   PASS                                                                                                     overlap_dates=0
+            series_sorted_by_time_before_shift_features   PASS                                                                                                    series_count=500
+                     demand_lag_1_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 1
+                     demand_lag_7_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 7
+                    demand_lag_14_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 14
+                    demand_lag_28_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 28
+             demand_history_lag_1_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 1
+             demand_history_lag_2_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 2
+             demand_history_lag_3_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 3
+             demand_history_lag_4_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 4
+             demand_history_lag_5_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 5
+             demand_history_lag_6_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 6
+             demand_history_lag_7_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 7
+             demand_history_lag_8_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 8
+             demand_history_lag_9_uses_only_past_target   PASS                                                                                expected=grouped demand shifted by 9
+            demand_history_lag_10_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 10
+            demand_history_lag_11_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 11
+            demand_history_lag_12_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 12
+            demand_history_lag_13_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 13
+            demand_history_lag_14_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 14
+            demand_history_lag_15_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 15
+            demand_history_lag_16_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 16
+            demand_history_lag_17_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 17
+            demand_history_lag_18_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 18
+            demand_history_lag_19_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 19
+            demand_history_lag_20_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 20
+            demand_history_lag_21_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 21
+            demand_history_lag_22_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 22
+            demand_history_lag_23_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 23
+            demand_history_lag_24_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 24
+            demand_history_lag_25_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 25
+            demand_history_lag_26_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 26
+            demand_history_lag_27_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 27
+            demand_history_lag_28_uses_only_past_target   PASS                                                                               expected=grouped demand shifted by 28
+           demand_rolling_mean_7_shifted_before_rolling   PASS                                                                                 expected=shift(1).rolling(7).mean()
+          demand_rolling_mean_14_shifted_before_rolling   PASS                                                                                expected=shift(1).rolling(14).mean()
+          demand_rolling_mean_28_shifted_before_rolling   PASS                                                                                expected=shift(1).rolling(28).mean()
+   no_unvalidated_target_rolling_or_cumulative_features   PASS                                                                                              unvalidated_columns=[]
+                   merged_row_count_matches_sales_panel   PASS                                                                                                        rows=9565000
+                                calendar_day_key_unique   PASS                                                                                                  calendar_rows=1969
+                   price_keys_unique_by_store_item_week   PASS                                                                                                        duplicates=0
+           merge_preserves_original_sales_target_values   PASS                                                         calendar/price joins preserve demand on checked_rows=250000
+                   all_sales_rows_have_calendar_mapping   PASS                                                                                             missing_calendar_rows=0
+                   item_id_categories_fit_on_train_only   PASS                                                                   train_categories=2538, validation_categories=2538
+                   dept_id_categories_fit_on_train_only   PASS                                                                         train_categories=7, validation_categories=7
+                    cat_id_categories_fit_on_train_only   PASS                                                                         train_categories=3, validation_categories=3
+                  store_id_categories_fit_on_train_only   PASS                                                                       train_categories=10, validation_categories=10
+                  state_id_categories_fit_on_train_only   PASS                                                                         train_categories=3, validation_categories=3
+           no_full_data_scaler_in_feature_preprocessing   PASS No scaler is applied in tabular preprocessing; TimeMixer StandardScaler is fit inside encoder.fit(train_sequences).
+validation_temporal_embeddings_use_train_fitted_encoder   PASS                        fit_timemixer_encoder calls encoder.fit(train history) before transform(validation history).
+ stability_loss_uses_train_consecutive_predictions_only   PASS                                                                                        valid_adjacent_pairs=9280000
+    stability_objective_does_not_use_validation_targets   PASS                         train_stability_aware_xgboost builds labels and adjacency context from training frame only.
+
+Conclusion:
+No data leakage was detected in the audited pipeline path. The split is strictly time-based, demand lag and rolling features are shifted before aggregation, calendar and price merges preserve sales targets, categorical encoding is fit on training data only, and the stability objective uses training-time consecutive prediction pairs only.
