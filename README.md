@@ -18,7 +18,7 @@ paper/       Anonymous ICEME manuscript and bibliography
 src/         Data processing, models, evaluation, and utilities
 results/     Selected experiment tables and audit outputs
 figures/     Main publication figures
-data/        Compressed M5 files and download instructions
+data/        Local dataset directory and download instructions
 notebooks/   Optional exploratory notebooks
 ```
 
@@ -32,20 +32,14 @@ pip install -r requirements.txt
 
 ## Dataset
 
-Compressed copies of the M5 Forecasting Accuracy CSV files are included under:
-
-```text
-data/m5-forecasting-accuracy-gzip/
-```
-
-After confirming that your use complies with the official competition terms,
-decompress them into the directory expected by the code:
+The code expects the official M5 Forecasting Accuracy files under:
 
 ```text
 data/m5-forecasting-accuracy/
 ```
 
-See [data/README.md](data/README.md) for decompression and official Kaggle download instructions.
+See [data/README.md](data/README.md) for official Kaggle download instructions.
+Raw competition data is not redistributed in this public repository.
 
 ## Baseline and Hybrid Experiment
 
@@ -88,4 +82,4 @@ The pipeline uses chronological train-validation splits, shifted lag and rolling
 
 - The TimeMixer-style component is a lightweight temporal feature extractor, not a full end-to-end reproduction of the original TimeMixer architecture.
 - The capped 5,000-series diagnostic is not used for the main scalability or runtime claims.
-- M5 files are subject to the official Kaggle competition terms.
+- Raw M5 files are subject to the official Kaggle competition terms.
