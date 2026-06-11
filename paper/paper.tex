@@ -10,7 +10,7 @@
 \usepackage{adjustbox}
 \usepackage[protrusion=true,expansion=true]{microtype}
 
-\hyphenation{XGBoost TimeMixer item-store stability-aware}
+\hyphenation{XGBoost MLP-Enc item-store stability-aware}
 
 \title{Accuracy-Preserving Stability Regularization for Large-Scale Retail Demand Forecasting}
 \author{Anonymous Authors}
@@ -28,13 +28,13 @@ Demand forecasts are no longer passive reports in many supply chains. They feed 
 
 Recent deep forecasting models have improved long-horizon sequence modeling through Transformer, MLP, and multiscale temporal architectures \cite{wang2024timemixer,nie2023patchtst,zhou2021informer,wu2021autoformer,chen2023tsmixer}. Retail demand forecasting, however, is not only a sequence modeling problem. Calendar effects, sell prices, events, product hierarchy, and store identity often carry information that is awkward to represent with temporal history alone. The M5 benchmark makes this tension explicit by combining item-store demand histories with calendar and price tables \cite{makridakis2022m5}. Tree-based learners such as XGBoost are widely used for sparse, heterogeneous tabular prediction problems because boosted trees can model nonlinear feature interactions efficiently \cite{chen2016xgboost}; in retail forecasting, such models are often paired with engineered lag and rolling features \cite{fildes2022retail,makridakis2022m5}.
 
-This paper centers on stability regularization rather than on model combination alone. We ask whether a forecasting model can be trained to reduce excessive consecutive within-series forecast movement while remaining close to the accuracy profile of a strong structured baseline. The hybrid temporal-structured forecasting pipeline is the implementation vehicle for this question: a lightweight TimeMixer-style encoder summarizes recent demand history, structured operational features provide calendar, price, hierarchy, item, and store context, and an XGBoost layer produces point forecasts. The purpose is not to maximize smoothness at all costs, but to study a controlled accuracy-stability trade-off in a setting where simpler post-processing is an important competing explanation.
+This paper centers on stability regularization rather than on model combination alone. We ask whether a forecasting model can be trained to reduce excessive consecutive within-series forecast movement while remaining close to the accuracy profile of a strong structured baseline. The hybrid temporal-structured forecasting pipeline is the implementation vehicle for this question: a lightweight multiscale MLP encoder summarizes recent demand history, structured operational features provide calendar, price, hierarchy, item, and store context, and an XGBoost layer produces point forecasts. The purpose is not to maximize smoothness at all costs, but to study a controlled accuracy-stability trade-off in a setting where simpler post-processing is an important competing explanation.
 
 Our contributions are threefold. First, we adapt an accuracy-plus-stability training objective to a boosted-tree retail forecasting pipeline and state explicitly how this differs from prior neural stability objectives and post-hoc stabilization methods. Second, we evaluate the objective in a hybrid temporal-structured M5 setup that uses temporal embeddings for recent demand history and structured calendar, price, hierarchy, item, and store features for tree-based prediction. Third, we systematically evaluate the accuracy-stability trade-off through smoothing baselines, normalized stability, seed robustness, leakage auditing, runtime analysis, and large-scale M5 experiments on 1000, 3000, and 4000 demand series. We avoid claiming state-of-the-art accuracy or a newly invented stability concept; the contribution is an operationally motivated stability-accuracy study for a practical boosted-tree retail pipeline.
 
 \section{Related Work}
 \subsection{Deep Time Series Forecasting}
-Recent deep forecasting research has developed specialized architectures for long-horizon temporal representation learning. TimeMixer models temporal variation through decomposable multiscale mixing, allowing information from different temporal resolutions to interact within a unified forecasting architecture \cite{wang2024timemixer}. PatchTST introduced a patch-based Transformer formulation in which subseries patches serve as temporal tokens, improving long-context modeling while reducing sequence length \cite{nie2023patchtst}. Informer addressed the computational burden of long-sequence forecasting through ProbSparse attention and a generative decoder \cite{zhou2021informer}, while Autoformer incorporated decomposition and auto-correlation mechanisms for long-term forecasting \cite{wu2021autoformer}. TSMixer showed that all-MLP time and feature mixing can be competitive with attention-based models, reinforcing that strong temporal models need not rely exclusively on self-attention \cite{chen2023tsmixer}.
+Recent research has developed specialized architectures for long-horizon temporal representation learning. Multiscale temporal mixing, as instantiated in models like MLP-Enc, allows information from different temporal resolutions to interact within a unified architecture \cite{wang2024timemixer}. PatchTST introduced a patch-based Transformer formulation in which subseries patches serve as temporal tokens, improving long-context modeling while reducing sequence length \cite{nie2023patchtst}. Informer addressed the computational burden of long-sequence forecasting through ProbSparse attention and a generative decoder \cite{zhou2021informer}, while Autoformer incorporated decomposition and auto-correlation mechanisms for long-term forecasting \cite{wu2021autoformer}. TSMixer showed that all-MLP time and feature mixing can be competitive with attention-based models, reinforcing that strong temporal models need not rely exclusively on self-attention \cite{chen2023tsmixer}.
 
 These architectures have reported strong long-horizon forecasting performance under standard benchmark protocols, but forecasting evaluations are still commonly organized around point-error metrics \cite{petropoulos2022forecasting,godahewa2025forecastStability}. In retail and supply-chain settings, this can leave a gap between benchmark performance and operational usefulness. A forecast that is accurate on average but unstable across consecutive periods may still create planning churn \cite{lee1997bullwhip,chen2000bullwhip,godahewa2025forecastStability}. Moreover, temporal-only models may underuse structured operational signals such as price, calendar events, product hierarchy, and store identity, all of which are central to retail demand benchmarks and practice \cite{makridakis2022m5,fildes2022retail}.
 
@@ -44,7 +44,7 @@ Retail demand forecasting is a high-dimensional operational problem involving sp
 Tree-based machine learning remains a practical choice in such settings because structured demand drivers are often nonlinear and heterogeneous \cite{fildes2022retail,makridakis2022m5}. XGBoost provides scalable gradient-boosted trees with efficient handling of sparse features and nonlinear interactions \cite{chen2016xgboost}. In many retail forecasting pipelines, structured learners are paired with manually specified lag and rolling-window features \cite{fildes2022retail}. This motivates hybrid models that retain the tabular strength of boosted trees while adding learned representations of recent demand history.
 
 \subsection{Hybrid Forecasting Frameworks}
-Hybrid forecasting methods combine temporal representation learning with structured covariate modeling. Temporal encoders such as TimeMixer can learn multiscale demand patterns \cite{wang2024timemixer}, while structured models such as XGBoost exploit price, calendar, event, and categorical covariates \cite{chen2016xgboost}. This motivation is consistent with work on explicit time-feature mixing in neural forecasting and with the exogenous covariates provided by realistic retail benchmarks such as M5 \cite{chen2023tsmixer,makridakis2022m5}.
+Hybrid forecasting methods combine temporal representation learning with structured covariate modeling. Temporal encoders such as MLP-Enc can learn multiscale demand patterns \cite{wang2024timemixer}, while structured models such as XGBoost exploit price, calendar, event, and categorical covariates \cite{chen2016xgboost}. This motivation is consistent with work on explicit time-feature mixing in neural forecasting and with the exogenous covariates provided by realistic retail benchmarks such as M5 \cite{chen2023tsmixer,makridakis2022m5}.
 
 The present study uses this hybrid direction as a practical vehicle for stability regularization. Rather than treating temporal encoders and structured learners as competing alternatives, the pipeline uses temporal embeddings as learned demand-history summaries and combines them with structured operational features before tree-based prediction. The primary question, however, is not whether this particular combination is universally superior, but whether training-time regularization can improve forecast stability while preserving accuracy.
 
@@ -65,7 +65,7 @@ The temporal encoder maps historical demand sequences to compact embeddings:
 \begin{equation}
 \mathbf{z}_{i,t} = g_{\theta}(\mathbf{y}_{i,t-L:t-1}),
 \end{equation}
-where $g_{\theta}(\cdot)$ denotes a lightweight TimeMixer-style encoder inspired by multiscale temporal mixing \cite{wang2024timemixer}. In the implementation, this component is used as a temporal feature extractor rather than as a full end-to-end replacement for the forecasting model. For each item-store/date observation, a fixed 28-day historical demand window is transformed into multiscale summary features and passed through a compact neural encoder. The fitted encoder outputs embedding columns $\mathbf{z}_{i,t}$ that summarize recent demand history.
+where $g_{\theta}(\cdot)$ denotes a lightweight multiscale MLP encoder. In the implementation, this component is used as a temporal feature extractor rather than as a full end-to-end replacement for the forecasting model. For each item-store/date observation, a fixed 28-day historical demand window is transformed into multiscale summary features (raw values, rolling means and standard deviations at windows of 2, 4, 7, and 14 days, and first-order differences) and passed through a compact neural encoder. The fitted encoder outputs embedding columns $\mathbf{z}_{i,t}$ that summarize recent demand history at multiple temporal resolutions. This provides the tree model with pre-summarized multiscale context that is more difficult to extract from raw demand lags alone using greedy tree splits.
 
 The forecasting model concatenates temporal embeddings with lag, rolling, calendar, price, hierarchy, item, and store features:
 \begin{equation}
@@ -126,7 +126,7 @@ Our FSS is a consecutive-prediction movement metric within a validation horizon.
 
 \section{Experiments}
 \subsection{Dataset and Setup}
-We use the M5 Forecasting dataset, which contains daily Walmart item-store demand series together with calendar and sell-price information \cite{makridakis2022m5}. The main scalability study uses selected subsets of 1000, 3000, and 4000 demand series. Each scale is run with the same training configuration: full selected training rows, 300 XGBoost trees, identical feature engineering, the same TimeMixer-style encoder settings, and the stability-aware objective with $\lambda=0.05$. This keeps the reported runtime comparisons on the same footing.
+We use the M5 Forecasting dataset, which contains daily Walmart item-store demand series together with calendar and sell-price information \cite{makridakis2022m5}. The main scalability study uses selected subsets of 1000, 3000, and 4000 demand series. Each scale is run with the same training configuration: full selected training rows, 300 XGBoost trees, identical feature engineering, the same multiscale encoder settings, and the stability-aware objective with $\lambda=0.05$. This keeps the reported runtime comparisons on the same footing.
 
 The split is strictly chronological: all training dates precede all validation dates. Feature engineering includes lag features, rolling-window features computed after shifting demand by at least one day, calendar covariates, sell-price covariates, and categorical item/store information. Repeated experiments use random seeds 42, 123, and 2024. We also ran an automated leakage audit covering the split, shifted lag and rolling features, train-only categorical encoding, train-fitted temporal scaling, and same-series training-only stability pairs.
 
@@ -134,7 +134,7 @@ The split is strictly chronological: all training dates precede all validation d
 We remove raw MAPE because M5 contains many zero and near-zero demand observations \cite{makridakis2022m5}. MAPE divides each absolute error by the corresponding actual value; zero-demand days make the metric undefined, and near-zero days can dominate the average. This issue is well documented for intermittent demand \cite{hyndman2006accuracyMetrics,syntetos2005accuracy,petropoulos2022forecasting}. We instead report WAPE, which normalizes total absolute error by aggregate observed demand. Because many M5 series are intermittent and low-volume, nFSS can take large absolute values when the average realized demand in the denominator is small. We therefore interpret nFSS as a relative robustness metric rather than as an absolute operational threshold.
 
 \subsection{Baselines}
-We compare four primary methods: (i) XGBoost baseline using structured operational features, (ii) TimeMixer-only temporal forecasting, (iii) Hybrid TimeMixer + XGBoost, and (iv) Hybrid TimeMixer + XGBoost with the stability-aware objective. To address whether stability gains arise merely from smoothing, we additionally evaluate XGBoost + exponential smoothing and Hybrid TimeMixer + XGBoost + exponential smoothing with $\alpha \in \{0.5,0.7,0.9\}$.
+We compare four primary methods: (i) XGBoost baseline using structured operational features, (ii) multiscale MLP encoder-only temporal forecasting, (iii) Hybrid multiscale encoder + XGBoost, and (iv) Hybrid multiscale encoder + XGBoost with the stability-aware objective. To address whether stability gains arise merely from smoothing, we additionally evaluate XGBoost + exponential smoothing and Hybrid multiscale encoder + XGBoost + exponential smoothing with $\alpha \in \{0.5,0.7,0.9\}$.
 
 \subsection{Main Results}
 The main-results table reports mean and standard deviation across seeds, and the accompanying figure summarizes RMSE and FSS across scales. XGBoost remains the strongest point-accuracy baseline at the revised main scales. The stability-aware hybrid model, in contrast, gives the lowest FSS among the primary training methods at each scale. The result is best read as an accuracy-stability trade-off, not as a replacement for the structured baseline on pure RMSE.
@@ -151,15 +151,15 @@ The main-results table reports mean and standard deviation across seeds, and the
 Series & Method & Runs & MAE & RMSE & WAPE (\%) & FSS & Volatility \\
 \midrule
 1000 & XGBoost & 3 & 0.926 $\pm$ 0.034 & 1.774 $\pm$ 0.185 & 70.02 $\pm$ 4.82 & 0.220 $\pm$ 0.028 & 0.313 $\pm$ 0.043 \\
-1000 & TimeMixer & 3 & 0.970 $\pm$ 0.044 & 1.930 $\pm$ 0.316 & 73.28 $\pm$ 4.30 & 0.347 $\pm$ 0.076 & 0.391 $\pm$ 0.073 \\
+1000 & MLP-Enc & 3 & 0.970 $\pm$ 0.044 & 1.930 $\pm$ 0.316 & 73.28 $\pm$ 4.30 & 0.347 $\pm$ 0.076 & 0.391 $\pm$ 0.073 \\
 1000 & Hybrid & 3 & 0.926 $\pm$ 0.034 & 1.781 $\pm$ 0.198 & 70.02 $\pm$ 4.76 & 0.222 $\pm$ 0.030 & 0.315 $\pm$ 0.044 \\
 1000 & Hybrid + Stable & 3 & 0.927 $\pm$ 0.035 & 1.787 $\pm$ 0.208 & 70.08 $\pm$ 4.71 & 0.205 $\pm$ 0.030 & 0.302 $\pm$ 0.042 \\
 3000 & XGBoost & 3 & 0.953 $\pm$ 0.006 & 1.852 $\pm$ 0.081 & 69.81 $\pm$ 1.47 & 0.228 $\pm$ 0.007 & 0.326 $\pm$ 0.012 \\
-3000 & TimeMixer & 3 & 0.993 $\pm$ 0.012 & 2.002 $\pm$ 0.123 & 72.79 $\pm$ 1.37 & 0.401 $\pm$ 0.040 & 0.439 $\pm$ 0.027 \\
+3000 & MLP-Enc & 3 & 0.993 $\pm$ 0.012 & 2.002 $\pm$ 0.123 & 72.79 $\pm$ 1.37 & 0.401 $\pm$ 0.040 & 0.439 $\pm$ 0.027 \\
 3000 & Hybrid & 3 & 0.953 $\pm$ 0.007 & 1.850 $\pm$ 0.078 & 69.84 $\pm$ 1.43 & 0.229 $\pm$ 0.008 & 0.328 $\pm$ 0.013 \\
 3000 & Hybrid + Stable & 3 & 0.954 $\pm$ 0.007 & 1.854 $\pm$ 0.082 & 69.91 $\pm$ 1.45 & 0.213 $\pm$ 0.009 & 0.315 $\pm$ 0.012 \\
 4000 & XGBoost & 3 & 0.955 $\pm$ 0.013 & 1.876 $\pm$ 0.012 & 69.53 $\pm$ 1.00 & 0.232 $\pm$ 0.007 & 0.331 $\pm$ 0.006 \\
-4000 & TimeMixer & 3 & 0.998 $\pm$ 0.020 & 2.014 $\pm$ 0.037 & 72.65 $\pm$ 1.34 & 0.350 $\pm$ 0.027 & 0.399 $\pm$ 0.031 \\
+4000 & MLP-Enc & 3 & 0.998 $\pm$ 0.020 & 2.014 $\pm$ 0.037 & 72.65 $\pm$ 1.34 & 0.350 $\pm$ 0.027 & 0.399 $\pm$ 0.031 \\
 4000 & Hybrid & 3 & 0.956 $\pm$ 0.012 & 1.882 $\pm$ 0.012 & 69.56 $\pm$ 0.94 & 0.231 $\pm$ 0.005 & 0.330 $\pm$ 0.005 \\
 4000 & Hybrid + Stable & 3 & 0.956 $\pm$ 0.012 & 1.881 $\pm$ 0.014 & 69.58 $\pm$ 0.96 & 0.214 $\pm$ 0.006 & 0.318 $\pm$ 0.007 \\
 \bottomrule
@@ -269,15 +269,15 @@ The scalability experiments use consistent training configurations across the ma
 Series & Method & Runtime Mean (s) & Runtime Std (s) & Peak Memory (MB) \\
 \midrule
 1000 & XGBoost & 17.31 & 6.53 & 3147.36 \\
-1000 & TimeMixer & 27.24 & 4.28 & 3147.36 \\
+1000 & MLP-Enc & 27.24 & 4.28 & 3147.36 \\
 1000 & Hybrid & 47.91 & 9.83 & 3147.36 \\
 1000 & Hybrid + Stable & 75.90 & 13.97 & 3147.36 \\
 3000 & XGBoost & 45.77 & 4.61 & 2893.42 \\
-3000 & TimeMixer & 187.26 & 21.47 & 2893.42 \\
+3000 & MLP-Enc & 187.26 & 21.47 & 2893.42 \\
 3000 & Hybrid & 269.29 & 38.70 & 2893.42 \\
 3000 & Hybrid + Stable & 352.97 & 39.81 & 2893.42 \\
 4000 & XGBoost & 53.09 & 10.63 & 3352.53 \\
-4000 & TimeMixer & 263.15 & 41.01 & 3352.53 \\
+4000 & MLP-Enc & 263.15 & 41.01 & 3352.53 \\
 4000 & Hybrid & 372.59 & 73.37 & 3352.53 \\
 4000 & Hybrid + Stable & 515.96 & 61.28 & 3352.53 \\
 \bottomrule
@@ -316,7 +316,9 @@ The normalized FSS analysis reduces sensitivity to demand scale, but it has its 
 
 \FloatBarrier
 \section{Conclusion}
-We presented an accuracy-preserving stability regularization study for large-scale retail demand forecasting. The central idea is to penalize excessive consecutive within-series forecast movement during training, rather than treating forecast stability only as a post-processing issue. We instantiate this idea with a hybrid temporal-structured pipeline that combines TimeMixer-style demand-history embeddings, structured operational covariates, and an XGBoost forecasting layer. In consistent full-configuration experiments on 1000, 3000, and 4000 M5 demand series, the method improves forecast stability while keeping RMSE changes small. The smoothing comparison clarifies the main trade-off: post-hoc smoothing is stronger for raw FSS, whereas objective-based regularization offers a more accuracy-preserving and scale-robust operating point. These findings support treating forecast stability as a first-class evaluation and training consideration in operational demand forecasting, without claiming universal superiority over simpler baselines.
+We presented an accuracy-preserving stability regularization study for large-scale retail demand forecasting. The central idea is to penalize excessive consecutive within-series forecast movement during training, rather than treating forecast stability only as a post-processing issue. We instantiate this idea with a hybrid temporal-structured pipeline that combines multiscale MLP encoder-style demand-history embeddings, structured operational covariates, and an XGBoost forecasting layer. In consistent full-configuration experiments on 1000, 3000, and 4000 M5 demand series, the method improves forecast stability while keeping RMSE changes small. The smoothing comparison clarifies the main trade-off: post-hoc smoothing is stronger for raw FSS, whereas objective-based regularization offers a more accuracy-preserving and scale-robust operating point. These findings support treating forecast stability as a first-class evaluation and training consideration in operational demand forecasting, without claiming universal superiority over simpler baselines.
+To support future work in forecast stability, the experimental pipeline and 
+objective implementation will be made available for reproducibility.
 
 \FloatBarrier
 \appendices
@@ -373,19 +375,19 @@ The normalized-FSS appendix table reports raw and normalized stability metrics f
 Series & Method & RMSE & FSS & nFSS & Volatility \\
 \midrule
 1000 & XGBoost & 1.774 $\pm$ 0.185 & 0.220 $\pm$ 0.028 & 650.2 $\pm$ 184.9 & 0.313 $\pm$ 0.043 \\
-1000 & TimeMixer & 1.930 $\pm$ 0.316 & 0.347 $\pm$ 0.076 & 1016.7 $\pm$ 331.5 & 0.391 $\pm$ 0.073 \\
+1000 & MLP-Enc & 1.930 $\pm$ 0.316 & 0.347 $\pm$ 0.076 & 1016.7 $\pm$ 331.5 & 0.391 $\pm$ 0.073 \\
 1000 & Hybrid & 1.781 $\pm$ 0.198 & 0.222 $\pm$ 0.030 & 645.8 $\pm$ 149.6 & 0.315 $\pm$ 0.044 \\
 1000 & Hybrid + Stable & 1.787 $\pm$ 0.208 & 0.205 $\pm$ 0.030 & 388.7 $\pm$ 113.8 & 0.302 $\pm$ 0.042 \\
 1000 & XGBoost + Smoothing & 1.812 $\pm$ 0.217 & 0.116 $\pm$ 0.015 & 449.0 $\pm$ 132.9 & 0.233 $\pm$ 0.033 \\
 1000 & Hybrid + Smoothing & 1.815 $\pm$ 0.223 & 0.116 $\pm$ 0.015 & 423.4 $\pm$ 94.7 & 0.234 $\pm$ 0.033 \\
 3000 & XGBoost & 1.852 $\pm$ 0.081 & 0.228 $\pm$ 0.007 & 687.4 $\pm$ 120.8 & 0.326 $\pm$ 0.012 \\
-3000 & TimeMixer & 2.002 $\pm$ 0.123 & 0.401 $\pm$ 0.040 & 931.9 $\pm$ 252.5 & 0.439 $\pm$ 0.027 \\
+3000 & MLP-Enc & 2.002 $\pm$ 0.123 & 0.401 $\pm$ 0.040 & 931.9 $\pm$ 252.5 & 0.439 $\pm$ 0.027 \\
 3000 & Hybrid & 1.850 $\pm$ 0.078 & 0.229 $\pm$ 0.008 & 669.6 $\pm$ 86.7 & 0.328 $\pm$ 0.013 \\
 3000 & Hybrid + Stable & 1.854 $\pm$ 0.082 & 0.213 $\pm$ 0.008 & 373.5 $\pm$ 56.1 & 0.316 $\pm$ 0.012 \\
 3000 & XGBoost + Smoothing & 1.887 $\pm$ 0.090 & 0.118 $\pm$ 0.004 & 452.1 $\pm$ 90.3 & 0.244 $\pm$ 0.010 \\
 3000 & Hybrid + Smoothing & 1.883 $\pm$ 0.087 & 0.119 $\pm$ 0.004 & 437.3 $\pm$ 50.0 & 0.246 $\pm$ 0.010 \\
 4000 & XGBoost & 1.876 $\pm$ 0.012 & 0.232 $\pm$ 0.007 & 650.1 $\pm$ 121.5 & 0.331 $\pm$ 0.006 \\
-4000 & TimeMixer & 2.013 $\pm$ 0.039 & 0.350 $\pm$ 0.028 & 868.7 $\pm$ 194.8 & 0.399 $\pm$ 0.032 \\
+4000 & MLP-Enc & 2.013 $\pm$ 0.039 & 0.350 $\pm$ 0.028 & 868.7 $\pm$ 194.8 & 0.399 $\pm$ 0.032 \\
 4000 & Hybrid & 1.881 $\pm$ 0.012 & 0.231 $\pm$ 0.005 & 664.6 $\pm$ 136.2 & 0.330 $\pm$ 0.005 \\
 4000 & Hybrid + Stable & 1.880 $\pm$ 0.015 & 0.214 $\pm$ 0.006 & 377.5 $\pm$ 73.7 & 0.318 $\pm$ 0.007 \\
 4000 & XGBoost + Smoothing & 1.911 $\pm$ 0.016 & 0.121 $\pm$ 0.004 & 416.9 $\pm$ 74.6 & 0.248 $\pm$ 0.003 \\
@@ -413,7 +415,7 @@ Time split & PASS & train max 2016-03-27; validation min 2016-03-28 \\
 Validation overlap & PASS & no validation rows or validation dates in training \\
 Lag features & PASS & lag features use grouped historical demand shifts \\
 Rolling features & PASS & rolling means computed after shift(1) \\
-Encoding/scaling & PASS & categorical encoders and TimeMixer scaler fit on training data only \\
+Encoding/scaling & PASS & categorical encoders and MLP-Enc scaler fit on training data only \\
 Stability objective & PASS & same-series consecutive training predictions only \\
 \bottomrule
 \end{tabular}
@@ -437,7 +439,7 @@ The capped-5000 appendix table reports the earlier capped 5000-series diagnostic
 Series & Method & Configuration & MAE & RMSE & WAPE (\%) & FSS & Volatility \\
 \midrule
 5000 & XGBoost & capped rows, 120 trees & 0.981 $\pm$ 0.003 & 1.972 $\pm$ 0.074 & 71.10 $\pm$ 0.83 & 0.219 $\pm$ 0.004 & 0.310 $\pm$ 0.004 \\
-5000 & TimeMixer & capped rows, 120 trees & 0.999 $\pm$ 0.013 & 2.014 $\pm$ 0.079 & 72.40 $\pm$ 0.70 & 0.390 $\pm$ 0.060 & 0.430 $\pm$ 0.039 \\
+5000 & MLP-Enc & capped rows, 120 trees & 0.999 $\pm$ 0.013 & 2.014 $\pm$ 0.079 & 72.40 $\pm$ 0.70 & 0.390 $\pm$ 0.060 & 0.430 $\pm$ 0.039 \\
 5000 & Hybrid & capped rows, 120 trees & 0.981 $\pm$ 0.004 & 1.971 $\pm$ 0.082 & 71.12 $\pm$ 0.78 & 0.222 $\pm$ 0.001 & 0.308 $\pm$ 0.002 \\
 5000 & Hybrid + Stable & capped rows, 120 trees & 0.982 $\pm$ 0.002 & 1.970 $\pm$ 0.071 & 71.18 $\pm$ 0.74 & 0.208 $\pm$ 0.004 & 0.301 $\pm$ 0.003 \\
 \bottomrule

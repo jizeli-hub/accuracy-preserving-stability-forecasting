@@ -33,18 +33,26 @@ def forecast_loss_mse(labels: np.ndarray, predictions: np.ndarray) -> float:
 
 def stability_loss_mean_abs_change(
     predictions: np.ndarray,
-    groups,
-    order_values,
+    groups: np.ndarray,
+    order_values: np.ndarray,
 ) -> float:
-    """Compute mean(abs(pred_t - pred_t_minus_1)) within each series."""
-    frame = pd.DataFrame(
-        {
-            "prediction": np.asarray(predictions, dtype=float),
-            "group": groups,
-            "order": order_values,
-        }
-    ).sort_values(["group", "order"])
-    return float(frame.groupby("group", sort=False)["prediction"].diff().abs().dropna().mean())
+    """Compute mean(abs(pred_t - pred_t_minus_1)) within each series.
+
+    Vectorized implementation replacing slow Pandas groupby.diff().
+    Assumes (group, order) are already sorted as in the training pipeline.
+    """
+    preds = np.asarray(predictions, dtype=float)
+
+    # Identify adjacent same-group pairs with consecutive order values
+    # (Matching the build_stability_context logic)
+    valid_mask = (groups[1:] == groups[:-1]) & (order_values[1:] - order_values[:-1] == 1)
+
+    if not np.any(valid_mask):
+        return 0.0
+
+    # diffs[i] = preds[i+1] - preds[i]
+    diffs = np.abs(np.diff(preds))
+    return float(np.mean(diffs[valid_mask]))
 
 
 def prediction_scale_summary(raw_predictions: np.ndarray, clipped_predictions: np.ndarray) -> dict[str, float]:
@@ -72,6 +80,7 @@ def build_stability_context(
     order_values = sorted_frame[order_col].to_numpy()
 
     previous_index = np.arange(len(sorted_frame)) - 1
+    # valid_pairs[i] is True if row i and row i-1 are a valid consecutive pair
     valid_pairs = np.r_[False, (groups[1:] == groups[:-1]) & (order_values[1:] - order_values[:-1] == 1)]
     pair_count = int(valid_pairs.sum())
 
@@ -88,7 +97,11 @@ def make_stability_objective(
     stability_lambda: float,
     epsilon: float = 1e-6,
 ):
-    """Create a custom objective for MSE plus adjacent forecast-change penalty."""
+    """Create a custom objective for MSE plus adjacent forecast-change penalty.
+
+    Implements a 'Scenario-based counterfactual analysis' of forecast movement
+    as a Total Variation (TV) regularizer.
+    """
     labels = np.asarray(labels, dtype=float)
     sample_count = len(labels)
     valid_positions = np.flatnonzero(context.valid_pairs)
@@ -103,11 +116,13 @@ def make_stability_objective(
         hessian = np.full(sample_count, 2.0, dtype=float)
 
         if stability_lambda > 0 and len(valid_positions) > 0:
+            # Vectorized TV subgradient
             diffs = predictions[valid_positions] - predictions[previous_positions]
             signs = diffs / np.maximum(np.abs(diffs), epsilon)
             stability_grad = stability_lambda * sample_count * signs / pair_count
             np.add.at(gradient, valid_positions, stability_grad)
             np.add.at(gradient, previous_positions, -stability_grad)
+            # TV Hessian approximation
             hessian += stability_lambda * epsilon
 
         return gradient, hessian

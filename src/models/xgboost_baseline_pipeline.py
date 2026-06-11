@@ -34,8 +34,8 @@ from src.models.stability_objective import (
     train_stability_aware_xgboost,
 )
 from src.models.timemixer_encoder import (
-    TimeMixerConfig,
-    TimeMixerTemporalEncoder,
+    MultiscaleEncoderConfig,
+    MultiscaleTemporalEncoder,
     add_demand_history_sequences,
     history_feature_columns,
 )
@@ -115,14 +115,14 @@ def parse_args() -> argparse.Namespace:
         default=list(STABILITY_LAMBDAS),
         help="Lambda values for stability-aware objective training.",
     )
-    parser.add_argument("--timemixer-history-length", type=int, default=28, help="Demand history window length.")
-    parser.add_argument("--timemixer-embedding-dim", type=int, default=16, help="Temporal embedding dimension.")
-    parser.add_argument("--timemixer-max-iter", type=int, default=80, help="Maximum TimeMixer training iterations.")
+    parser.add_argument("--encoder-history-length", type=int, default=28, help="Demand history window length.")
+    parser.add_argument("--encoder-embedding-dim", type=int, default=16, help="Temporal embedding dimension.")
+    parser.add_argument("--encoder-max-iter", type=int, default=80, help="Maximum encoder training iterations.")
     parser.add_argument(
-        "--timemixer-max-train-rows",
+        "--encoder-max-train-rows",
         type=int,
         default=50_000,
-        help="Maximum sampled rows for fitting the TimeMixer encoder.",
+        help="Maximum sampled rows for fitting the multiscale encoder.",
     )
     return parser.parse_args()
 
@@ -317,7 +317,12 @@ def build_stability_objective_comparison(
         predictions_by_lambda[method] = predictions
         metrics = evaluate_predictions(validation, predictions)
         forecast_loss = forecast_loss_mse(validation["demand"], predictions)
-        stability_loss = stability_loss_mean_abs_change(predictions, validation["id"], validation["d_int"])
+        # Fix: passing numpy arrays for vectorized stability loss
+        stability_loss = stability_loss_mean_abs_change(
+            predictions, 
+            validation["id"].to_numpy(), 
+            validation["d_int"].to_numpy()
+        )
         total_loss = forecast_loss + stability_lambda * stability_loss
         scale_summary = prediction_scale_summary(raw_predictions, predictions)
         rows.append(
@@ -379,28 +384,28 @@ def build_three_method_comparison(
     return pd.DataFrame(rows), methods
 
 
-def fit_timemixer_encoder(
+def fit_multiscale_encoder(
     train: pd.DataFrame,
     validation: pd.DataFrame,
-    config: TimeMixerConfig,
-) -> tuple[TimeMixerTemporalEncoder, pd.DataFrame, pd.DataFrame, np.ndarray]:
-    """Train TimeMixer and return train/validation embeddings plus direct forecasts."""
+    config: MultiscaleEncoderConfig,
+) -> tuple[MultiscaleTemporalEncoder, pd.DataFrame, pd.DataFrame, np.ndarray]:
+    """Train MultiscaleEncoder and return train/validation embeddings plus direct forecasts."""
     columns = history_feature_columns(config.history_length)
-    encoder = TimeMixerTemporalEncoder(config)
+    encoder = MultiscaleTemporalEncoder(config)
     encoder.fit(train[columns].to_numpy(dtype=float), train["demand"].to_numpy(dtype=float))
 
     train_embeddings = encoder.transform(train[columns].to_numpy(dtype=float))
     validation_sequences = validation[columns].to_numpy(dtype=float)
     validation_embeddings = encoder.transform(validation_sequences)
-    timemixer_predictions = encoder.predict(validation_sequences)
-    return encoder, train_embeddings, validation_embeddings, timemixer_predictions
+    encoder_predictions = encoder.predict(validation_sequences)
+    return encoder, train_embeddings, validation_embeddings, encoder_predictions
 
 
 def append_temporal_embeddings(
     frame: pd.DataFrame,
     embeddings: pd.DataFrame,
 ) -> tuple[pd.DataFrame, list[str]]:
-    """Append TimeMixer embeddings to a modeling frame."""
+    """Append multiscale embeddings to a modeling frame."""
     embedding_columns = list(embeddings.columns)
     output = frame.reset_index(drop=True).copy()
     output = pd.concat([output, embeddings.reset_index(drop=True)], axis=1)
@@ -440,21 +445,21 @@ def build_hybrid_model_comparison(
     feature_columns: list[str],
     baseline_predictions: np.ndarray,
     lambdas: list[float],
-    timemixer_config: TimeMixerConfig,
+    encoder_config: MultiscaleEncoderConfig,
     random_seed: int = RANDOM_SEED,
     n_estimators: int = 300,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, np.ndarray]]:
-    """Compare XGBoost, TimeMixer-only, hybrid, and hybrid stability-objective models."""
-    _, train_embeddings, validation_embeddings, timemixer_predictions = fit_timemixer_encoder(
+    """Compare XGBoost, encoder-only, hybrid, and hybrid stability-objective models."""
+    _, train_embeddings, validation_embeddings, encoder_predictions = fit_multiscale_encoder(
         train,
         validation,
-        timemixer_config,
+        encoder_config,
     )
     hybrid_train, embedding_columns = append_temporal_embeddings(train, train_embeddings)
     hybrid_validation, _ = append_temporal_embeddings(validation, validation_embeddings)
     hybrid_feature_columns = feature_columns + embedding_columns
 
-    LOGGER.info("Training Hybrid TimeMixer + XGBoost")
+    LOGGER.info("Training Hybrid multiscale encoder + XGBoost")
     hybrid_predictions = predict_with_feature_set(
         hybrid_train,
         hybrid_validation,
@@ -478,8 +483,8 @@ def build_hybrid_model_comparison(
 
     predictions_by_method = {
         "XGBoost baseline": baseline_predictions,
-        "TimeMixer only": timemixer_predictions,
-        "Hybrid TimeMixer + XGBoost": hybrid_predictions,
+        "Multiscale encoder only": encoder_predictions,
+        "Hybrid multiscale + XGBoost": hybrid_predictions,
         f"Hybrid + Stability Objective ({best_hybrid_objective_method})": best_hybrid_objective_predictions,
     }
 
@@ -807,7 +812,7 @@ def main() -> None:
     LOGGER.info("Preparing features")
     modeling_table, feature_columns = prepare_modeling_table(
         merged,
-        history_length=args.timemixer_history_length,
+        history_length=args.encoder_history_length,
     )
     train, validation = split_train_validation(modeling_table, validation_days=args.validation_days)
 
@@ -862,12 +867,12 @@ def main() -> None:
         args.figures_dir,
     )
 
-    LOGGER.info("Running hybrid TimeMixer experiments")
-    timemixer_config = TimeMixerConfig(
-        history_length=args.timemixer_history_length,
-        embedding_dim=args.timemixer_embedding_dim,
-        max_iter=args.timemixer_max_iter,
-        max_train_rows=args.timemixer_max_train_rows,
+    LOGGER.info("Running hybrid multiscale encoder experiments")
+    encoder_config = MultiscaleEncoderConfig(
+        history_length=args.encoder_history_length,
+        embedding_dim=args.encoder_embedding_dim,
+        max_iter=args.encoder_max_iter,
+        max_train_rows=args.encoder_max_train_rows,
     )
     hybrid_comparison, embedding_analysis, hybrid_predictions = build_hybrid_model_comparison(
         train,
@@ -875,7 +880,7 @@ def main() -> None:
         feature_columns,
         predictions,
         lambdas=args.stability_lambdas,
-        timemixer_config=timemixer_config,
+        encoder_config=encoder_config,
     )
     save_hybrid_outputs(
         validation,

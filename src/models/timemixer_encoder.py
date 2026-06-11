@@ -1,9 +1,9 @@
-"""Lightweight TimeMixer-style temporal encoder for demand histories.
+"""Lightweight multiscale MLP temporal encoder for demand histories.
 
-This module intentionally avoids heavyweight deep learning dependencies so the
-hybrid experiments remain easy to run on a research laptop. The encoder learns
-from historical demand windows, mixes multiple temporal resolutions, and exposes
-hidden temporal embeddings for downstream tree models.
+The encoder learns from historical demand windows, mixes multiple temporal
+resolutions using vectorized pooling, and exposes hidden temporal embeddings for
+downstream tree models. This module intentionally avoids heavyweight deep
+learning dependencies to ensure scalability.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
-class TimeMixerConfig:
+class MultiscaleEncoderConfig:
     """Configuration for the lightweight temporal encoder."""
 
     history_length: int = 28
@@ -33,11 +33,11 @@ class TimeMixerConfig:
     random_seed: int = RANDOM_SEED
 
 
-class TimeMixerTemporalEncoder:
+class MultiscaleTemporalEncoder:
     """Multi-scale temporal encoder trained on historical demand sequences."""
 
-    def __init__(self, config: TimeMixerConfig | None = None) -> None:
-        self.config = config or TimeMixerConfig()
+    def __init__(self, config: MultiscaleEncoderConfig | None = None) -> None:
+        self.config = config or MultiscaleEncoderConfig()
         self.scaler = StandardScaler()
         self.model = MLPRegressor(
             hidden_layer_sizes=(64, self.config.embedding_dim),
@@ -52,7 +52,7 @@ class TimeMixerTemporalEncoder:
         )
         self.is_fit = False
 
-    def fit(self, sequences: np.ndarray, targets: np.ndarray) -> "TimeMixerTemporalEncoder":
+    def fit(self, sequences: np.ndarray, targets: np.ndarray) -> "MultiscaleTemporalEncoder":
         """Train the encoder to forecast demand from historical sequences."""
         mixed = self._mix_temporal_scales(sequences)
         targets = np.asarray(targets, dtype=float)
@@ -63,7 +63,7 @@ class TimeMixerTemporalEncoder:
             mixed = mixed[indices]
             targets = targets[indices]
 
-        LOGGER.info("Training TimeMixer encoder on %s windows", len(mixed))
+        LOGGER.info("Training multiscale encoder on %s windows", len(mixed))
         scaled = self.scaler.fit_transform(mixed)
         self.model.fit(scaled, targets)
         self.is_fit = True
@@ -84,12 +84,12 @@ class TimeMixerTemporalEncoder:
         for weights, bias in zip(self.model.coefs_[:-1], self.model.intercepts_[:-1]):
             activations = np.maximum(0, activations @ weights + bias)
 
-        columns = [f"timemixer_emb_{index:02d}" for index in range(activations.shape[1])]
+        columns = [f"multiscale_emb_{index:02d}" for index in range(activations.shape[1])]
         return pd.DataFrame(activations, columns=columns)
 
     def _check_fit(self) -> None:
         if not self.is_fit:
-            raise ValueError("TimeMixerTemporalEncoder must be fit before use.")
+            raise ValueError("MultiscaleTemporalEncoder must be fit before use.")
 
     def _mix_temporal_scales(self, sequences: np.ndarray) -> np.ndarray:
         sequences = np.asarray(sequences, dtype=float)
@@ -98,25 +98,26 @@ class TimeMixerTemporalEncoder:
 
         scale_features = [sequences]
         for window in (2, 4, 7, 14):
-            scale_features.append(_rolling_pool(sequences, window=window, reducer="mean"))
-            scale_features.append(_rolling_pool(sequences, window=window, reducer="std"))
+            scale_features.append(_vectorized_rolling_pool(sequences, window=window, reducer="mean"))
+            scale_features.append(_vectorized_rolling_pool(sequences, window=window, reducer="std"))
 
         scale_features.append(np.diff(sequences, axis=1, prepend=sequences[:, :1]))
         return np.concatenate(scale_features, axis=1)
 
 
-def _rolling_pool(sequences: np.ndarray, window: int, reducer: str) -> np.ndarray:
-    """Pool each sequence over non-overlapping windows."""
-    pooled = []
-    for start in range(0, sequences.shape[1], window):
-        chunk = sequences[:, start : start + window]
-        if reducer == "mean":
-            pooled.append(chunk.mean(axis=1))
-        elif reducer == "std":
-            pooled.append(chunk.std(axis=1))
-        else:
-            raise ValueError(f"Unknown reducer: {reducer}")
-    return np.column_stack(pooled)
+def _vectorized_rolling_pool(sequences: np.ndarray, window: int, reducer: str) -> np.ndarray:
+    """Pool each sequence over non-overlapping windows using vectorization."""
+    n_samples, length = sequences.shape
+    # Trim to multiple of window
+    trimmed_len = (length // window) * window
+    reshaped = sequences[:, :trimmed_len].reshape(n_samples, -1, window)
+    
+    if reducer == "mean":
+        return reshaped.mean(axis=2)
+    elif reducer == "std":
+        return reshaped.std(axis=2)
+    else:
+        raise ValueError(f"Unknown reducer: {reducer}")
 
 
 def add_demand_history_sequences(
@@ -125,7 +126,7 @@ def add_demand_history_sequences(
     group_col: str = "id",
     target_col: str = "demand",
 ) -> pd.DataFrame:
-    """Add dense historical demand lag columns used by TimeMixer."""
+    """Add dense historical demand lag columns used by the encoder."""
     output = frame.copy()
     grouped = output.groupby(group_col, sort=False)[target_col]
     for lag in range(1, history_length + 1):
