@@ -1,0 +1,32 @@
+{
+  "configuration": {
+    "data_dir": "data/m5-forecasting-accuracy",
+    "max_series": [
+      "1000"
+    ],
+    "random_seed": [
+      42,
+      123,
+      2024
+    ],
+    "num_runs": 3,
+    "output_dir": "robustness_runs/series_1000",
+    "validation_days": 28,
+    "stability_lambda": 0.05,
+    "timemixer_history_length": 28,
+    "timemixer_embedding_dim": 16,
+    "timemixer_max_iter": 80,
+    "timemixer_max_train_rows": 50000,
+    "xgboost_n_estimators": 300,
+    "xgboost_max_train_rows": null
+  },
+  "resolved_series_counts": [
+    "1000"
+  ],
+  "resolved_seeds": [
+    42,
+    123,
+    2024
+  ],
+  "output_dir": "robustness_runs/series_1000"
+}

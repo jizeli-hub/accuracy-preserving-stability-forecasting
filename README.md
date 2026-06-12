@@ -41,6 +41,9 @@ data/m5-forecasting-accuracy/
 See [data/README.md](data/README.md) for official Kaggle download instructions.
 Raw competition data is not redistributed in this public repository.
 
+The checksums in `data/M5_SHA256SUMS.txt` identify the exact M5 files used for
+the reported experiments.
+
 ## Baseline and Hybrid Experiment
 
 ```bash
@@ -65,6 +68,19 @@ python -m src.models.large_scale_experiments \
 ```
 
 Large experiments can require substantial memory and runtime. Start with a smaller `--max-series` value for a smoke test.
+
+## Reproducing the Reported Tables
+
+The exact three-seed runtime observations behind the paper's runtime table are
+committed under `results/runtime_sources/`. Recompute and verify the aggregate
+table with:
+
+```bash
+python scripts/verify_runtime_table.py
+```
+
+See [REPRODUCIBILITY.md](REPRODUCIBILITY.md) for the full experiment commands,
+output provenance, and expected hardware-dependent differences.
 
 ## Paper
 

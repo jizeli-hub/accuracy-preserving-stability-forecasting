@@ -1,0 +1,13 @@
+Series,Method,Runtime Mean (s),Runtime Std (s),Peak Memory (MB)
+1000,XGBoost,17.31,6.53,3147.36
+1000,TimeMixer,27.24,4.28,3147.36
+1000,Hybrid,47.91,9.83,3147.36
+1000,Hybrid + Stable,75.90,13.97,3147.36
+3000,XGBoost,45.77,4.61,2893.42
+3000,TimeMixer,187.26,21.47,2893.42
+3000,Hybrid,269.29,38.70,2893.42
+3000,Hybrid + Stable,352.97,39.81,2893.42
+4000,XGBoost,53.09,10.63,3352.53
+4000,TimeMixer,263.15,41.01,3352.53
+4000,Hybrid,372.59,73.37,3352.53
+4000,Hybrid + Stable,515.96,61.28,3352.53
