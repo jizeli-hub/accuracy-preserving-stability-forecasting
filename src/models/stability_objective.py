@@ -96,11 +96,13 @@ def make_stability_objective(
     context: StabilityObjectiveContext,
     stability_lambda: float,
     epsilon: float = 1e-6,
+    huber_delta: float | None = None,
 ):
     """Create a custom objective for MSE plus adjacent forecast-change penalty.
 
     Implements a 'Scenario-based counterfactual analysis' of forecast movement
-    as a Total Variation (TV) regularizer.
+    as a Total Variation (TV) regularizer. If huber_delta is provided, uses 
+    a Huber-style smooth approximation near zero for better gradient stability.
     """
     labels = np.asarray(labels, dtype=float)
     sample_count = len(labels)
@@ -118,12 +120,26 @@ def make_stability_objective(
         if stability_lambda > 0 and len(valid_positions) > 0:
             # Vectorized TV subgradient
             diffs = predictions[valid_positions] - predictions[previous_positions]
-            signs = diffs / np.maximum(np.abs(diffs), epsilon)
+            
+            if huber_delta is not None:
+                # Huber-style smooth approximation: 
+                # grad = diff if |diff| <= delta else delta * sign(diff)
+                signs = np.where(
+                    np.abs(diffs) <= huber_delta,
+                    diffs / huber_delta,
+                    np.sign(diffs)
+                )
+            else:
+                # Standard L1 subgradient with epsilon stabilization
+                signs = diffs / np.maximum(np.abs(diffs), epsilon)
+
             stability_grad = stability_lambda * sample_count * signs / pair_count
             np.add.at(gradient, valid_positions, stability_grad)
             np.add.at(gradient, previous_positions, -stability_grad)
+            
             # TV Hessian approximation
-            hessian += stability_lambda * epsilon
+            # Adding a small stability term to the Hessian helps second-order convergence
+            hessian += stability_lambda * (epsilon if huber_delta is None else 1.0/max(huber_delta, 1e-8))
 
         return gradient, hessian
 
