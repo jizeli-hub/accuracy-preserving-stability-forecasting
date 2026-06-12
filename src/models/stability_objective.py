@@ -98,11 +98,13 @@ def make_stability_objective(
     epsilon: float = 1e-6,
     huber_delta: float | None = None,
 ):
-    """Create a custom objective for MSE plus adjacent forecast-change penalty.
+    """Create a custom objective for MSE plus an adjacent forecast-change penalty.
 
-    Implements a 'Scenario-based counterfactual analysis' of forecast movement
-    as a Total Variation (TV) regularizer. If huber_delta is provided, uses 
-    a Huber-style smooth approximation near zero for better gradient stability.
+    The penalty is the within-series total variation (mean absolute consecutive
+    change) of the predictions, contributing an L1 subgradient to each member of
+    every same-series adjacent prediction pair. If ``huber_delta`` is provided,
+    the term uses a Huber-style smooth approximation near zero for better
+    gradient stability; otherwise an epsilon-stabilized L1 subgradient is used.
     """
     labels = np.asarray(labels, dtype=float)
     sample_count = len(labels)
@@ -152,8 +154,14 @@ def train_stability_aware_xgboost(
     stability_lambda: float,
     num_boost_round: int = 300,
     random_seed: int = RANDOM_SEED,
+    huber_delta: float | None = None,
 ) -> xgb.Booster:
-    """Train XGBoost with a stability-aware custom objective."""
+    """Train XGBoost with a stability-aware custom objective.
+
+    With ``huber_delta=None`` (the default, used for all reported experiments)
+    the stability term uses the epsilon-stabilized L1 subgradient. Passing a
+    positive ``huber_delta`` selects the optional Huber-smoothed variant.
+    """
     ordered_train = train.sort_values(["id", "d_int"]).reset_index(drop=True)
     labels = ordered_train["demand"].to_numpy(dtype=float)
     context = build_stability_context(ordered_train)
@@ -178,7 +186,7 @@ def train_stability_aware_xgboost(
         params=params,
         dtrain=dtrain,
         num_boost_round=num_boost_round,
-        obj=make_stability_objective(labels, context, stability_lambda),
+        obj=make_stability_objective(labels, context, stability_lambda, huber_delta=huber_delta),
     )
 
 
