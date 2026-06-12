@@ -19,7 +19,7 @@ src/         Data processing, models, evaluation, and utilities
 results/     Selected experiment tables and audit outputs
 figures/     Main publication figures
 data/        Local dataset directory and download instructions
-notebooks/   Optional exploratory notebooks
+tests/       Unit tests for the stability objective, metrics, and smoothing
 ```
 
 ## Environment
@@ -28,6 +28,19 @@ notebooks/   Optional exploratory notebooks
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+## Tests
+
+Unit tests cover the stability-aware objective (an analytic-versus-finite-difference
+gradient check for both the L1 and optional Huber penalties), the accuracy and
+stability metrics (MAE, RMSE, FSS, within-series volatility), and the exponential
+smoothing baseline. The metric and smoothing tests require only `numpy`, `pandas`,
+and `pytest`; the objective test additionally needs a working `xgboost` install and
+is skipped automatically otherwise.
+
+```bash
+python -m pytest tests/
 ```
 
 ## Dataset

@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .DS_Store
 .cache/
+.pytest_cache/
 .matplotlib_cache/
 .ipynb_checkpoints/
 .venv/
