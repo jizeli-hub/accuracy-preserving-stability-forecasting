@@ -14,7 +14,7 @@ The main experiments use 1,000, 3,000, and 4,000 M5 item-store demand series. Th
 ## Repository Layout
 
 ```text
-paper/       Anonymous ICEME manuscript and bibliography
+paper/       Current ICEME manuscript, earlier source versions, and bibliography
 src/         Data processing, models, evaluation, and utilities
 results/     Selected experiment tables and audit outputs
 figures/     Main publication figures
@@ -84,11 +84,11 @@ output provenance, and expected hardware-dependent differences.
 
 ## Paper
 
-The anonymous submission manuscript is available in:
+The latest manuscript is available as [ME2699.pdf](paper/ME2699.pdf)
+(updated September 9, 2026). This is the named-author, 10-page version.
 
-```text
-paper/Accuracy-Preserving-Stability-Regularization-ICEME-2026.docx
-```
+The existing DOCX and LaTeX files remain available as earlier editable versions;
+they have not been updated to match this PDF.
 
 ## Data Leakage Controls
 
